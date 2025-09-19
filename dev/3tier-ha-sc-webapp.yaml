@@ -1,0 +1,581 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: High availability and scalability 3 tier web application
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Amazon EC2 Configuration
+        Parameters:
+          - AvailabilityZone1
+          - AvailabilityZone2
+          - AMIImage
+          - InstanceType
+          - PkeyName
+      - Label:
+          default: RDS Configuration
+        Parameters:
+          - RDSEngineVersion
+          - RDSMasterPassword
+      - Label:
+          default: AWS tag parameters
+        Parameters:
+          - punitag
+
+Parameters:
+  AvailabilityZone1:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    ConstraintDescription: Must be the name of the first availability zone.
+    Default: us-east-1a
+    Description: Enter the name of the first availability zone.
+  AvailabilityZone2:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    ConstraintDescription: Must be the name of the second availability zone.
+    Default: us-east-1b
+    Description: Enter the name of the second availability zone.
+  AMIImage:
+    Type: String
+    ConstraintDescription: Must be a valid AMI for the region.
+    Default: ami-0bc036f52cff31329
+    Description: Select an AMI for the EC2 instance.
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    ConstraintDescription: Must be a valid EC2 instance type.
+    Description: Enter the instance type for the EC2 instance.
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+  PkeyName:
+    Type: String
+    ConstraintDescription: Must be the name of an existing EC2 Key Pair.
+    Default: webserver
+    Description: Enter Key name
+  RDSEngineVersion:
+    Type: String
+    ConstraintDescription: Must be a valid RDS MySQL database engine version.
+    Description: Select a RDS MySQL database engine version.
+    Default: 5.7.mysql_aurora.2.11.5
+  RDSMasterPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 30
+    AllowedPattern: ^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?\d)(?=.*?[_@#$%^&+=]).*$
+    ConstraintDescription: Password must contain at least one uppercase letter, one
+      lowercase letter, one digit, and one special character (@#$%^&+=).
+  punitag:
+    Description: Specify a unique name for tag this stack resources.
+    Type: String
+    Default: cf3tierwebapp
+    AllowedPattern: '[\x20-\x7E]*'
+    ConstraintDescription: Must contain only ASCII characters
+
+Resources:
+  MainVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref MainVPC
+
+  MainSubnetPublic:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: 10.0.10.0/24
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  MainSubnetPrivate:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      CidrBlock: 10.0.100.0/24
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  SecondSubnetPublic:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock: 10.0.20.0/24
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  SecondSubnetPrivate:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      CidrBlock: 10.0.200.0/24
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  RouteIGW:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetMainPubRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref MainSubnetPublic
+      RouteTableId: !Ref PublicRouteTable
+
+  SubnetSecondPubRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SecondSubnetPublic
+      RouteTableId: !Ref PublicRouteTable
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref MainSubnetPublic
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  RouteNATGateway:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  SubnetMainPrivRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref MainSubnetPrivate
+      RouteTableId: !Ref PrivateRouteTable
+
+  SubnetSecondPrivRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SecondSubnetPrivate
+      RouteTableId: !Ref PrivateRouteTable
+
+  ########################################################################
+
+  WebALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80
+      VpcId: !Ref MainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: Web-ALB
+      Subnets:
+        - !Ref MainSubnetPublic
+        - !Ref SecondSubnetPublic
+      SecurityGroups:
+        - !Ref WebALBSecurityGroup
+      Scheme: internet-facing
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+      Type: application
+
+  ApplicationLBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Name: WebTargetGroup
+      Port: 80
+      Protocol: HTTP
+      ProtocolVersion: HTTP1
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref MainVPC
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  ApplicationLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationLBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  ApplicationLBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref ApplicationLBTargetGroup
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /
+      ListenerArn: !Ref ApplicationLBListener
+      Priority: 1
+
+  ########################################################################
+
+  SSMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref SSMRole
+  SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: /
+      Policies:
+        - PolicyName: ReadSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Resource: '*'
+                Action: secretsmanager:GetSecretValue
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  ########################################################################
+
+  LaunchTemplateWeb:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref AMIImage
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref PkeyName
+        IamInstanceProfile:
+          Arn: !GetAtt SSMInstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref AutoScalGroupWebInsSecurityGroup
+      LaunchTemplateName: WebServerLaunchTemplate
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: !Ref punitag
+
+  ########################################################################
+  AutoScalGroupWebInsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80
+      VpcId: !Ref MainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref WebALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  AutoScalGroupWebIns:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      DesiredCapacity: 2
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplateWeb
+        Version: !GetAtt LaunchTemplateWeb.LatestVersionNumber
+      TargetGroupARNs:
+        - !Ref ApplicationLBTargetGroup
+      HealthCheckGracePeriod: 60
+      MaxInstanceLifetime: 432000
+      MaxSize: 4
+      MinSize: 2
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupMinSize
+            - GroupMaxSize
+      VPCZoneIdentifier:
+        - !Ref MainSubnetPrivate
+        - !Ref SecondSubnetPrivate
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+          PropagateAtLaunch: true
+
+  AutoScalPolicyWeb:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalGroupWebIns
+      PolicyType: TargetTrackingScaling
+      EstimatedInstanceWarmup: 60
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 30
+
+  ########################################################################
+
+  DBaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable MySQL access
+      VpcId: !Ref MainVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AutoScalGroupWebInsSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS Subnet Group
+      SubnetIds:
+        - !Ref MainSubnetPrivate
+        - !Ref SecondSubnetPrivate
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  RDSDataBaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DatabaseName: immersionday
+      DBClusterIdentifier: rdscluster
+      Engine: aurora-mysql
+      EngineVersion: !Ref RDSEngineVersion
+      StorageType: aurora
+      MasterUsername: admin
+      MasterUserPassword: !Ref RDSMasterPassword
+      DBClusterParameterGroupName: !Ref RDSDBClusterParameterGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DBaseSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  RDSDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref RDSDataBaseCluster
+      PubliclyAccessible: false
+      DBInstanceClass: db.r6i.large
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  RDSDBInstance2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref RDSDataBaseCluster
+      PubliclyAccessible: false
+      DBInstanceClass: db.r6i.large
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  RDSDBClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: RDS Database Cluster Parameter Group
+      Family: aurora-mysql5.7
+      Parameters:
+        time_zone: US/Eastern
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: RDS Database Parameter Group
+      Family: aurora-mysql5.7
+      Parameters:
+        sql_mode: IGNORE_SPACE
+        max_allowed_packet: 1024
+        innodb_buffer_pool_size: '{DBInstanceClassMemory*3/4}'
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  ########################################################################
+
+  SecretRDSMasterPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: mysecret
+      SecretString: !Sub '{"username": "admin","password": "${RDSMasterPassword}"}'
+      Tags:
+        - Key: Name
+          Value: !Ref punitag
+
+  SecretRDSAttach:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref SecretRDSMasterPassword
+      TargetId: !Ref RDSDataBaseCluster
+      TargetType: AWS::RDS::DBCluster
+    DependsOn: RDSDataBaseCluster
+
+########################################################################
+########################################################################
+
+Outputs:
+  otMainVPC:
+    Description: Amazon VPC
+    Value: !Ref MainVPC
+  otInternetGateway:
+    Description: Internet Gateway
+    Value: !Ref InternetGateway
+  otVPCGatewayAttachment:
+    Description: Amazon VPC Gateway
+    Value: !Ref VPCGatewayAttachment
+  otMainSubnetPublic:
+    Description: Amazon VPC Subnet
+    Value: !Ref MainSubnetPublic
+  otMainSubnetPrivate:
+    Description: Amazon VPC Subnet
+    Value: !Ref MainSubnetPrivate
+  otSecondSubnetPublic:
+    Description: Amazon VPC Subnet
+    Value: !Ref SecondSubnetPublic
+  otSecondSubnetPrivate:
+    Description: Amazon VPC Subnet
+    Value: !Ref SecondSubnetPrivate
+  otPublicRouteTable:
+    Description: Amazon VPC Route Table
+    Value: !Ref PublicRouteTable
+  otPrivateRouteTable:
+    Description: Amazon VPC Route Table
+    Value: !Ref PrivateRouteTable
+  otRouteIGW:
+    Description: Amazon Route
+    Value: !Ref RouteIGW
+  otNATGateway:
+    Description: Amazon NAT Gateway
+    Value: !Ref NATGateway
+  otNATGatewayEIP:
+    Description: Amazon EIP
+    Value: !Ref NATGatewayEIP
+  otRouteNATGateway:
+    Description: Amazon Route
+    Value: !Ref RouteNATGateway
+  otWebALBSecurityGroup:
+    Description: AWS Security Group
+    Value: !Ref WebALBSecurityGroup
+  otApplicationLoadBalancer:
+    Description: Amazon Elastic Load Balancer
+    Value: !Ref ApplicationLoadBalancer
+  otApplicationLBTargetGroup:
+    Description: Target Group for Application Load Balancer
+    Value: !Ref ApplicationLBTargetGroup
+  otApplicationLBListener:
+    Description: Listeners for Application Load Balancer
+    Value: !Ref ApplicationLBListener
+  otApplicationLBListenerRule:
+    Description: Listener Rule
+    Value: !Ref ApplicationLBListenerRule
+  otSSMInstanceProfile:
+    Description: Amazon Instance Profile
+    Value: !Ref SSMInstanceProfile
+  otLaunchTemplateWeb:
+    Description: Auto Scaling Launch Template
+    Value: !Ref LaunchTemplateWeb
+  otAutoScalGroupWebInsSecurityGroup:
+    Description: AWS Security Group
+    Value: !Ref AutoScalGroupWebInsSecurityGroup
+  otAutoScalGroupWebIns:
+    Description: Amazon EC2 AutoScaling Group
+    Value: !Ref AutoScalGroupWebIns
+  otAutoScalPolicyWeb:
+    Description: Policy for EC2 AutoScaling Group
+    Value: !Ref AutoScalPolicyWeb
+  otDBaseSecurityGroup:
+    Description: AWS Security Group
+    Value: !Ref DBaseSecurityGroup
+  otRDSSubnetGroup:
+    Description: Amazon RDS Subnet Group
+    Value: !Ref RDSSubnetGroup
+  otRDSDataBaseCluster:
+    Description: Amazon RDS Cluster
+    Value: !Ref RDSDataBaseCluster
+  otSecretRDSMasterPassword:
+    Description: Amazon Secrets
+    Value: !Ref SecretRDSMasterPassword
+  otSecretRDSAttach:
+    Description: Amazon Secrets
+    Value: !Ref SecretRDSAttach
