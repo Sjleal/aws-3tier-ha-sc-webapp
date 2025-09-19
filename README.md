@@ -654,7 +654,7 @@ Once we have finished designing the template for our stack, it is time to build 
 
 You can use a tool named [Application Composer](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/app-composer-for-cloudformation.html) in CloudFormation console mode to validate your template and also you can drag, drop, configure, and connect a variety of resources onto a visual canvas. The following image shows the resources involved in the template and a canvas representation of them.
 
-![Image description](https://github.com/Sjleal/aws-3tier-ha-sc-webapp/blob/main/images/screnshots/diagram/aws-composer-3tier-ha-sc-webapp.png)
+![Image description](https://github.com/Sjleal/aws-3tier-ha-sc-webapp/blob/main/images/diagram/aws-composer-3tier-ha-sc-webapp.png)
 
 To [create the stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-console-create-stack.html) you need to follow these steps:
 
