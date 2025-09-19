@@ -29,7 +29,7 @@ As you can see, most of the steps will be automated in an AWS CloudFormation tem
 
 The following image provides a view of the proposed architecture for deploying website resources.
 
-![Image description](https://github.com/Sjleal/aws-3tier-ha-sc-webapp/blob/main/images/screnshots/diagram/aws-3tier-ha-sc-webapp.png)
+![Image description](https://github.com/Sjleal/aws-3tier-ha-sc-webapp/blob/main/images/diagram/aws-3tier-ha-sc-webapp.png)
 
 #### The User Experience
 The client only needs to know a single public address, which belongs to the Application Load Balancer (ALB). Every interaction with the application begins there, ensuring simplicity and transparency.
@@ -713,19 +713,3 @@ In essence, this proof of concept has provided both a practical and academic per
 - https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-snippets.html
 - https://catalog.us-east-1.prod.workshops.aws/workshops/869a0a06-1f98-4e19-b5ac-cbb1abdfc041/en-US/advanced-modules
 - https://github.com/aws-cloudformation/aws-cloudformation-templates/tree/main
-- 
-
-- https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/getting-started-cloudfront-overview.html
-- https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html
-- https://docs.aws.amazon.com/codepipeline/latest/userguide/pipelines-create.html
-- https://docs.aws.amazon.com/codepipeline/latest/userguide/connections-github.html
-- https://dev.to/neetumallan/deploying-commits-from-github-repo-to-aws-s3-bucket-4f2l
-- https://dev.to/tiamatt/aws-project-module-4-use-cloudfront-distribution-to-serve-a-static-website-hosted-on-aws-s3-via-cloudformation-226m
-- https://docs.aws.amazon.com/codepipeline/latest/userguide/connections-github.html
-- https://docs.aws.amazon.com/AmazonS3/latest/userguide/HostingWebsiteOnS3Setup.html
-- https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/getting-started-cloudfront-overview.html
-
-
-
-
-
